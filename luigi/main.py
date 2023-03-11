@@ -3,7 +3,6 @@ import datetime as dt
 
 import luigi
 import pandas as pd
-import pyarrow.parquet as pq
 from luigi.contrib import postgres
 from luigi.contrib import external_program
 
@@ -31,7 +30,7 @@ class Parse(luigi.Task):
         return Download(date=self.date)
 
     def output(self):
-        return luigi.LocalTarget(f'{self.date}.parquet')
+        return luigi.LocalTarget(f'{self.date}.csv')
 
     def run(self):
         inpt = self.input()
@@ -57,7 +56,7 @@ class Parse(luigi.Task):
         df = self._parse_dates(df)
 
         out = self.output()
-        df.to_parquet(out.path, index=False)
+        df.to_csv(out.path, index=False)
 
     def _remove_nulls(self, df: pd.DataFrame):
         mapper = lambda i: i.replace('\0', '')
@@ -116,10 +115,10 @@ class Index(postgres.CopyToTable):
         return Parse(date=self.date)
 
     def rows(self):
-        inpt = self.input()
-        prqt = pq.ParquetFile(inpt.path)
-        for batch in prqt.iter_batches():
-            yield from batch.to_pandas().itertuples(index=False)
+        with self.input().open() as f:
+            reader = csv.reader(f)
+            next(reader)
+            yield from reader
 
     def init_copy(self, conn):
         query = f"DELETE FROM {self.table} WHERE dtpreg LIKE '{self.date}%'"
