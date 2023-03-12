@@ -3,5 +3,7 @@
 ## Deployment
 
 ```sh
-dagster-cloud serverless deploy-docker --organization fintz --location test
+dagster-cloud serverless deploy-docker \
+    --organization fintz \
+    --location test
 ```
