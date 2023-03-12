@@ -1,7 +1,7 @@
 import datetime as dt
-from pathlib import Path
 
 import pandas as pd
+
 
 DF_COLSPECS = [
     (0, 2),
@@ -61,55 +61,78 @@ DF_NAMES = [
     'dismes',
 ]
 
+DF_INTS = [
+    'quatot'
+]
 
-def _remove_nulls(df: pd.DataFrame):
+DF_FLOATS = [
+    'preabe',
+    'premax',
+    'premin',
+    'premed',
+    'preult',
+    'preofc',
+    'preofv',
+    'voltot',
+    'preexe',
+    'ptoexe',
+]
+
+DF_DATES = [
+    'dtpreg',
+    'datven'
+]
+
+DF_INDEX = [
+    'nomres',
+    'codneg',
+    'dtpreg',
+    'tipreg',
+    'codbdi',
+    'prazot'
+]
+
+
+def _remove_nulls(df: pd.DataFrame) -> pd.DataFrame:
     mapper = lambda i: i.replace('\0', '')
     return df.applymap(mapper, na_action='ignore')
 
 
-def _remove_whitespace(df: pd.DataFrame):
+def _remove_whitespace(df: pd.DataFrame) -> pd.DataFrame:
     df = df.applymap(lambda i: i.strip(), na_action='ignore')
     df = df.applymap(lambda i: i.split(), na_action='ignore')
     df = df.applymap(lambda i: ' '.join(i), na_action='ignore')
     return df
 
 
-def _parse_floats(df: pd.DataFrame):
-    floats = [
-        'preabe',
-        'premax',
-        'premin',
-        'premed',
-        'preult',
-        'preofc',
-        'preofv',
-        'voltot',
-        'preexe',
-        'ptoexe',
-    ]
+def _parse_floats(df: pd.DataFrame) -> pd.DataFrame:
     mapper = lambda i: i.replace(',', '.')
-    df[floats] = df[floats].applymap(mapper, na_action='ignore')
-    df[floats] = df[floats].astype('double')
-    df[floats] /= 100
+    df[DF_FLOATS] = df[DF_FLOATS].applymap(mapper, na_action='ignore')
+    df[DF_FLOATS] = df[DF_FLOATS].astype('double')
+    df[DF_FLOATS] /= 100
     return df
 
 
-def _parse_ints(df: pd.DataFrame):
-    ints = ['quatot']
-    df[ints] = df[ints].astype('Int64')
+def _parse_ints(df: pd.DataFrame) -> pd.DataFrame:
+    df[DF_INTS] = df[DF_INTS].astype('Int64')
     return df
 
 
-def _parse_dates(df: pd.DataFrame):
-    dates = ['dtpreg', 'datven']
+def _parse_dates(df: pd.DataFrame) -> pd.DataFrame:
     mapper = lambda i: dt.datetime.strptime(i, '%Y%m%d').date()
-    df[dates] = df[dates].applymap(mapper, na_action='ignore')
+    df[DF_DATES] = df[DF_DATES].applymap(mapper, na_action='ignore')
     return df
 
 
-def read(path: Path) -> pd.DataFrame:
+def _set_indexes(df: pd.DataFrame) -> pd.DataFrame:
+    df['prazot'].fillna('', inplace=True)  # has some null values
+    df.set_index(DF_INDEX, inplace=True, verify_integrity=True)
+    return df
+
+
+def read_df(filename: str) -> pd.DataFrame:
     df = pd.read_fwf(
-        path,
+        filename,
         encoding='latin',
         dtype='string',
         compression='zip',
@@ -127,12 +150,6 @@ def read(path: Path) -> pd.DataFrame:
     df = _parse_ints(df)
     df = _parse_floats(df)
     df = _parse_dates(df)
-
-    # Remove nulls from primary key
-    df['prazot'].fillna('', inplace=True)
-
-    # Index
-    index = ['nomres', 'codneg', 'dtpreg', 'tipreg', 'codbdi', 'prazot']
-    df.set_index(index, inplace=True, verify_integrity=True)
+    df = _set_indexes(df)
 
     return df
