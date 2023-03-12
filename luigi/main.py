@@ -1,26 +1,34 @@
-import csv
+import logging
 import datetime as dt
+from tempfile import NamedTemporaryFile
 
 import luigi
+import pangres
 import pandas as pd
-from luigi.contrib import postgres
-from luigi.contrib import external_program
+import sqlalchemy as sa
+from luigi.format import Nop
+from luigi.contrib import s3
+from luigi.mock import MockTarget
 
-from constants import URL, DF_NAMES, DF_COLSPECS, TABLE_NAME, TABLE_COLUMNS
+import _utils
 
 
-class Download(external_program.ExternalProgramTask):
+logger = logging.getLogger(__name__)
+
+
+class Download(luigi.Task):
     retry_count = 3
 
     date = luigi.DateParameter()
 
     def output(self):
-        return luigi.LocalTarget(f'{self.date}.zip')
+        path = f's3://fintz-tst-dags/luigi/{self.date}.zip'
+        return s3.S3Target(path, format=Nop)
 
-    def program_args(self):
-        url = URL % f'{self.date.day:02d}{self.date.month:02d}{self.date.year}'
-        filename = self.output().path
-        return ['curl', url, '--output', filename, '--silent']
+    def run(self):
+        outp = self.output()
+        client = s3.S3Client()
+        client.copy('s3://fintz-tst-dags/out.zip', outp.path)
 
 
 class Parse(luigi.Task):
@@ -30,97 +38,54 @@ class Parse(luigi.Task):
         return Download(date=self.date)
 
     def output(self):
-        return luigi.LocalTarget(f'{self.date}.csv')
+        path = f's3://fintz-tst-dags/luigi/{self.date}.parquet'
+        return s3.S3Target(path, format=Nop)
 
     def run(self):
+        client = s3.S3Client()
+
         inpt = self.input()
+        outp = self.output()
 
-        df = pd.read_fwf(
-            inpt.path,
-            encoding='latin',
-            dtype='string',
-            compression='zip',
-            colspecs=DF_COLSPECS,
-            names=DF_NAMES
-        )
+        with NamedTemporaryFile(suffix='.zip') as tmp:
+            client.get(inpt.path, tmp.name)
+            df = _utils.read_df(tmp.name)
 
-        # Delete first and last lines
-        df.drop(df.head(1).index, inplace=True)
-        df.drop(df.tail(1).index, inplace=True)
-
-        # Parse everything
-        df = self._remove_nulls(df)
-        df = self._remove_whitespace(df)
-        df = self._parse_ints(df)
-        df = self._parse_floats(df)
-        df = self._parse_dates(df)
-
-        out = self.output()
-        df.to_csv(out.path, index=False)
-
-    def _remove_nulls(self, df: pd.DataFrame):
-        mapper = lambda i: i.replace('\0', '')
-        return df.applymap(mapper, na_action='ignore')
-
-    def _remove_whitespace(self, df: pd.DataFrame):
-        df = df.applymap(lambda i: i.strip(), na_action='ignore')
-        df = df.applymap(lambda i: i.split(), na_action='ignore')
-        df = df.applymap(lambda i: ' '.join(i), na_action='ignore')
-        return df
-
-    def _parse_floats(self, df: pd.DataFrame):
-        floats = [
-            'preabe',
-            'premax',
-            'premin',
-            'premed',
-            'preult',
-            'preofc',
-            'preofv',
-            'voltot',
-            'preexe',
-            'ptoexe',
-        ]
-        mapper = lambda i: i.replace(',', '.')
-        df[floats] = df[floats].applymap(mapper, na_action='ignore')
-        df[floats] = df[floats].astype('double')
-        df[floats] /= 100
-        return df
-
-    def _parse_ints(self, df: pd.DataFrame):
-        ints = ['quatot']
-        df[ints] = df[ints].astype('Int64')
-        return df
-
-    def _parse_dates(self, df: pd.DataFrame):
-        dates = ['dtpreg', 'datven']
-        mapper = lambda i: dt.datetime.strptime(i, '%Y%m%d').date()
-        df[dates] = df[dates].applymap(mapper, na_action='ignore')
-        return df
+        df.to_parquet(outp.path)
 
 
-
-class Index(postgres.CopyToTable):
-    host = 'localhost'
-    database = 'postgres'
-    user = 'postgres'
-    password = ''
-    table = TABLE_NAME
-    columns = TABLE_COLUMNS
-    port = '5432'
-
+class Index(luigi.Task):
     date = luigi.DateParameter()
+
+    # Adapted from:
+    #   https://stackoverflow.com/a/50552458
+    task_complete = False
+
+    def complete(self):
+        return self.task_complete
 
     def requires(self):
         return Parse(date=self.date)
 
-    def rows(self):
-        with self.input().open() as f:
-            reader = csv.reader(f)
-            next(reader)
-            yield from reader
+    def run(self):
+        inpt = self.input()
 
-    def init_copy(self, conn):
-        query = f"DELETE FROM {self.table} WHERE dtpreg LIKE '{self.date}%'"
-        with conn.cursor() as cur:
-            cur.execute(query)
+        df = pd.read_parquet(inpt.path)
+
+        host = 'postgresql://postgres@localhost:5432/postgres'
+        engine = sa.create_engine(host)
+
+        with engine.connect() as conn:
+            chunks = pangres.upsert(
+                df=df,
+                con=conn,
+                table_name='b3_acoes',
+                if_row_exists='ignore',
+                chunksize=10_000,
+                yield_chunks=True
+            )
+
+            for item in chunks:
+                logger.info('Inserted %d rows', item.rowcount)
+
+        self.task_complete = True
