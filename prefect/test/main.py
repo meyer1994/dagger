@@ -1,4 +1,5 @@
 import datetime as dt
+from argparse import ArgumentParser
 from tempfile import NamedTemporaryFile
 
 import pangres
@@ -71,12 +72,22 @@ def index(date: dt.date, path: str):
 
 
 @flow
-def execute() -> str:
+def daily():
     date = dt.date.today()
     filename = download(date)
     filename = parse(date, filename)
     index(date, filename)
 
 
+@flow
+def execute(date: dt.date):
+    filename = download(date)
+    filename = parse(date, filename)
+    index(date, filename)
+
+
 if __name__ == '__main__':
-    execute()
+    parser = ArgumentParser()
+    parser.add_argument('date', type=dt.date.fromisoformat)
+    args = parser.parse_args()
+    execute(args.date)
