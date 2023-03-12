@@ -1,28 +1,73 @@
 import datetime as dt
+from tempfile import NamedTemporaryFile
 
+import pangres
+import pandas as pd
+import sqlalchemy as sa
 from prefect import flow, task, get_run_logger
-from prefect_aws.s3 import
+from prefect_aws.s3 import S3Bucket
+from prefect.blocks.system import Secret
+
+import _utils
 
 
 @task
 def download(date: dt.date) -> str:
-    logger = get_run_logger()
-    logger.info('Executing download')
-    return 'download'
+    s3 = S3Bucket.load('aws-s3-bucket')
+
+    filename = date.isoformat()
+    filename = f'prefect/{date}.zip'
+
+    with NamedTemporaryFile(suffix='.zip') as tmp:
+        s3.download_object_to_path(from_path='out.zip', to_path=tmp.name)
+        s3.upload_from_path(from_path=tmp.name, to_path=filename)
+
+    return filename
 
 
 @task
-def parse(path: str) -> str:
-    logger = get_run_logger()
-    logger.info('Executing parse')
-    return 'parse'
+def parse(date: dt.date, path: str) -> str:
+    s3 = S3Bucket.load('aws-s3-bucket')
+
+    filename = date.isoformat()
+    filename = f'prefect/{filename}.parquet'
+
+    with NamedTemporaryFile(suffix='.zip') as tmp:
+        s3.download_object_to_path(from_path=path, to_path=tmp.name)
+        df = _utils.read_df(tmp.name)
+
+    with NamedTemporaryFile(suffix='.parquet') as tmp:
+        df.to_parquet(tmp.name)
+        s3.upload_from_path(from_path=tmp.name, to_path=filename)
+
+    return filename
 
 
 @task
-def index(path: str) -> str:
+def index(date: dt.date, path: str):
     logger = get_run_logger()
-    logger.info('Executing index')
-    return 'index'
+
+    s3 = S3Bucket.load('aws-s3-bucket')
+    host = Secret.load("aws-rds-postgres-host").get()
+
+    with NamedTemporaryFile(suffix='.parquet') as tmp:
+        s3.download_object_to_path(from_path=path, to_path=tmp.name)
+        df = pd.read_parquet(tmp.name)
+
+    engine = sa.create_engine(host)
+
+    with engine.connect() as conn:
+        chunks = pangres.upsert(
+            df=df,
+            con=conn,
+            table_name='b3_acoes',
+            if_row_exists='ignore',
+            chunksize=10_000,
+            yield_chunks=True
+        )
+
+        for item in chunks:
+            logger.info('Inserted %d rows', item.rowcount)
 
 
 @flow
@@ -30,14 +75,13 @@ def execute() -> str:
     logger = get_run_logger()
     logger.info('Executing execute')
 
-    date = dt.date(2023, 3, 8)
+    date = dt.date(2023, 3, 9)
     filename = download(date)
-    filename = parse(filename)
-    index(filename)
+    filename = parse(date, filename)
+    index(date, filename)
 
     return 'execute'
 
 
 if __name__ == '__main__':
-    date = dt.date(2023, 3, 8)
-    execute(date)
+    execute()
