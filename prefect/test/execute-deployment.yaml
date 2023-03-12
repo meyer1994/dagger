@@ -1,17 +1,23 @@
 ###
 ### A complete description of a Prefect Deployment for flow 'execute'
 ###
-name: fintz-tst-dags
+name: test
 description: null
-version: f461e28d115aa51a42f022dabaabe0ac
+version: 87cae050e9b60a0c7c495cc3cb62a5f1
 # The work queue that will handle this deployment's runs
 work_queue_name: default
-work_pool_name: null
+work_pool_name: default-agent-pool
 tags: []
 parameters: {}
 schedule: null
-is_schedule_active: null
+is_schedule_active: true
 infra_overrides: {}
+
+###
+### DO NOT EDIT BELOW THIS LINE
+###
+flow_name: execute
+manifest_path: null
 infrastructure:
   type: process
   env: {}
@@ -20,27 +26,18 @@ infrastructure:
   command: null
   stream_output: true
   working_dir: null
+  _block_document_id: 4ef72282-d47a-46fb-81f4-8afb59a76655
+  _block_document_name: anonymous-ba5c1663-7ed5-46f2-a007-22fd95a79b3e
+  _is_anonymous: true
   block_type_slug: process
   _block_type_slug: process
-
-###
-### DO NOT EDIT BELOW THIS LINE
-###
-flow_name: execute
-manifest_path: null
 storage: null
-path: /home/meyer/prj/dagger/prefect
+path: /home/meyer/prj/dagger/prefect/test
 entrypoint: main.py:execute
 parameter_openapi_schema:
   title: Parameters
   type: object
-  properties:
-    date:
-      title: date
-      position: 0
-      type: string
-      format: date
-  required:
-  - date
+  properties: {}
+  required: null
   definitions: null
-timestamp: '2023-03-12T12:42:06.062850+00:00'
+timestamp: '2023-03-12T14:21:08.003297+00:00'
