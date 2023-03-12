@@ -72,15 +72,10 @@ def index(date: dt.date, path: str):
 
 @flow
 def execute() -> str:
-    logger = get_run_logger()
-    logger.info('Executing execute')
-
-    date = dt.date(2023, 3, 9)
+    date = dt.date.today()
     filename = download(date)
     filename = parse(date, filename)
     index(date, filename)
-
-    return 'execute'
 
 
 if __name__ == '__main__':
