@@ -66,7 +66,7 @@ HOST = 'postgresql://postgres@localhost:5432/postgres'
 QUERY_TABLE = r'''
     CREATE TABLE IF NOT EXISTS b3_acoes (
         tipreg  text,
-        dtpreg  text,
+        dtpreg  date,
         codbdi  text,
         codneg  text,
         tpmerc  text,
