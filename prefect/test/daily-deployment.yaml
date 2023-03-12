@@ -1,9 +1,9 @@
 ###
-### A complete description of a Prefect Deployment for flow 'execute'
+### A complete description of a Prefect Deployment for flow 'daily'
 ###
-name: test
+name: test-daily
 description: null
-version: 912fa4e9f334a23df7c6e89e9bd61c2d
+version: 581895333598e2a042a2f689ab80854b
 # The work queue that will handle this deployment's runs
 work_queue_name: default
 work_pool_name: null
@@ -29,15 +29,15 @@ infrastructure:
 ###
 ### DO NOT EDIT BELOW THIS LINE
 ###
-flow_name: execute
+flow_name: daily
 manifest_path: null
 storage: null
 path: /home/meyer/prj/dagger/prefect/test
-entrypoint: main.py:execute
+entrypoint: main.py:daily
 parameter_openapi_schema:
   title: Parameters
   type: object
   properties: {}
   required: null
   definitions: null
-timestamp: '2023-03-12T17:26:05.888238+00:00'
+timestamp: '2023-03-12T17:35:13.445659+00:00'
