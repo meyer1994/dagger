@@ -38,11 +38,11 @@ class ZippedDataIOManager(UPathIOManager):
 
 @io_manager
 def parquet(_):
-    path = UPath('data')
+    path = UPath('s3://fintz-tst-dags/dagster')
     return PandasParquetIOManager(path)
 
 
 @io_manager
 def zipped(_):
-    path = UPath('data')
+    path = UPath('s3://fintz-tst-dags/dagster')
     return ZippedDataIOManager(path)
